@@ -6,13 +6,37 @@ import {
   CheckCircle,
   TrendingUp,
   Users,
-  FileText
+  FileText,
+  Sparkles
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../ui/card';
 import { Button } from '../ui/button';
 import { Progress } from '../ui/progress';
+import { UnitPlan } from '../../lib/types';
+import { format, isToday, parseISO, isFuture } from 'date-fns';
 
-export function Dashboard({ onViewChange }: { onViewChange: (view: string) => void }) {
+export function Dashboard({ onViewChange, units = [] }: { onViewChange: (view: string) => void, units?: UnitPlan[] }) {
+  // Calculate stats from unit plans
+  const totalLessons = units.reduce((sum, unit) => sum + unit.lessons.length, 0);
+  const totalResources = units.reduce((sum, unit) => 
+    sum + unit.lessons.reduce((lSum, lesson) => lSum + lesson.resources.length, 0), 0
+  );
+  const totalStandards = units.reduce((sum, unit) => sum + unit.standards.length, 0);
+  
+  // Get today's lessons
+  const todayLessons = units.flatMap(unit => 
+    unit.lessons
+      .filter(lesson => lesson.scheduledDate && isToday(parseISO(lesson.scheduledDate)))
+      .map(lesson => ({ ...lesson, unitTitle: unit.title, unitSubject: unit.subject }))
+  );
+
+  // Get upcoming lessons (next 7 days)
+  const upcomingLessons = units.flatMap(unit =>
+    unit.lessons.filter(lesson => 
+      lesson.scheduledDate && isFuture(parseISO(lesson.scheduledDate))
+    )
+  ).length;
+
   return (
     <div className="p-8 space-y-8 max-w-7xl mx-auto">
       {/* Welcome Section */}
@@ -30,32 +54,32 @@ export function Dashboard({ onViewChange }: { onViewChange: (view: string) => vo
       {/* Stats Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         <StatCard 
-          title="Total Students" 
-          value="124" 
-          icon={<Users className="h-4 w-4 text-blue-500" />} 
-          trend="+2 this week"
+          title="Unit Plans" 
+          value={units.length.toString()} 
+          icon={<Sparkles className="h-4 w-4 text-indigo-500" />} 
+          trend={`${totalLessons} lessons total`}
           trendUp={true}
         />
         <StatCard 
-          title="Lessons Planned" 
-          value="18" 
-          icon={<FileText className="h-4 w-4 text-indigo-500" />} 
-          trend="Next 7 days"
+          title="Total Lessons" 
+          value={totalLessons.toString()} 
+          icon={<FileText className="h-4 w-4 text-blue-500" />} 
+          trend={`${upcomingLessons} upcoming`}
           trendUp={true}
         />
         <StatCard 
-          title="Avg. Attendance" 
-          value="96%" 
+          title="Resources" 
+          value={totalResources.toString()} 
           icon={<CheckCircle className="h-4 w-4 text-green-500" />} 
-          trend="+1.2% vs last month"
+          trend={`Ready to use`}
           trendUp={true}
         />
         <StatCard 
-          title="Grading Tasks" 
-          value="5" 
-          icon={<Clock className="h-4 w-4 text-orange-500" />} 
-          trend="Needs attention"
-          trendUp={false}
+          title="Standards" 
+          value={totalStandards.toString()} 
+          icon={<TrendingUp className="h-4 w-4 text-orange-500" />} 
+          trend="Aligned"
+          trendUp={true}
         />
       </div>
 
@@ -70,42 +94,18 @@ export function Dashboard({ onViewChange }: { onViewChange: (view: string) => vo
           </div>
 
           <div className="space-y-4">
-            <ScheduleItem 
-              time="08:30 AM" 
-              subject="Mathematics 101" 
-              topic="Introduction to Algebra" 
-              grade="Grade 9"
-              room="Room 304"
-              color="border-l-blue-500"
-              status="completed"
-            />
-            <ScheduleItem 
-              time="10:00 AM" 
-              subject="Physics" 
-              topic="Newton's Laws of Motion" 
-              grade="Grade 10"
-              room="Lab 2"
-              color="border-l-purple-500"
-              status="current"
-            />
-            <ScheduleItem 
-              time="01:00 PM" 
-              subject="Mathematics 102" 
-              topic="Quadratic Equations" 
-              grade="Grade 9"
-              room="Room 304"
-              color="border-l-blue-500"
-              status="upcoming"
-            />
-             <ScheduleItem 
-              time="02:30 PM" 
-              subject="Study Hall" 
-              topic="Supervision" 
-              grade="Mixed"
-              room="Library"
-              color="border-l-slate-400"
-              status="upcoming"
-            />
+            {todayLessons.map((lesson, index) => (
+              <ScheduleItem 
+                key={index}
+                time={format(parseISO(lesson.scheduledDate), 'h:mm a')} 
+                subject={lesson.unitSubject} 
+                topic={lesson.title} 
+                grade={lesson.grade}
+                room={lesson.room}
+                color="border-l-blue-500"
+                status="current"
+              />
+            ))}
           </div>
         </div>
 
@@ -138,7 +138,7 @@ export function Dashboard({ onViewChange }: { onViewChange: (view: string) => vo
                   <span>Progress</span>
                   <span>75%</span>
                 </div>
-                <Progress value={75} className="bg-indigo-900/50" indicatorColor="bg-white" />
+                <Progress value={75} className="bg-indigo-900/50 [&>div]:bg-white" />
               </div>
             </CardContent>
           </Card>

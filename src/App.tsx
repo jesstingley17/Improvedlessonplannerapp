@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   LayoutDashboard, 
   Calendar, 
@@ -9,12 +9,18 @@ import {
   Plus,
   Bell,
   Search,
-  CheckCircle2
+  CheckCircle2,
+  Sparkles
 } from 'lucide-react';
 import { Button } from './components/ui/button';
 import { Dashboard } from './components/dashboard/Dashboard';
 import { PlannerView } from './components/planner/PlannerView';
-import { LessonsView } from './components/lessons/LessonsView';
+import { UnitPlanList } from './components/plans/UnitPlanList';
+import { UnitPlanEditor } from './components/plans/UnitPlanEditor';
+import { CreateUnitDialog } from './components/plans/CreateUnitDialog';
+import { UnitPlan } from './lib/types';
+import { Toaster } from 'sonner';
+import { projectId, publicAnonKey } from './utils/supabase/info';
 
 // Placeholder components for routes
 const StudentsView = () => <div className="p-8"><h1 className="text-2xl font-bold">Students Directory</h1><p className="text-muted-foreground mt-2">Manage your class roster and student progress here.</p></div>;
@@ -23,21 +29,142 @@ const SettingsView = () => <div className="p-8"><h1 className="text-2xl font-bol
 export default function App() {
   const [currentView, setCurrentView] = useState('dashboard');
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
+  const [units, setUnits] = useState<UnitPlan[]>([]);
+  const [selectedUnitId, setSelectedUnitId] = useState<string | null>(null);
+  const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
+
+  const selectedUnit = units.find(u => u.id === selectedUnitId);
+
+  // Load units from Supabase
+  useEffect(() => {
+    fetchUnits();
+  }, []);
+
+  const fetchUnits = async () => {
+    try {
+      setIsLoading(true);
+      console.log('Fetching unit plans from backend...');
+      const response = await fetch(`https://${projectId}.supabase.co/functions/v1/make-server-825f6f99/units`, {
+        headers: {
+          'Authorization': `Bearer ${publicAnonKey}`
+        }
+      });
+
+      if (!response.ok) {
+        throw new Error(`Failed to fetch units: ${response.status}`);
+      }
+
+      const data = await response.json();
+      console.log('Units loaded:', data);
+      setUnits(data.units || []);
+    } catch (error) {
+      console.error('Error fetching units:', error);
+      setUnits([]);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleCreateUnit = async (newUnit: UnitPlan) => {
+    try {
+      const response = await fetch(`https://${projectId}.supabase.co/functions/v1/make-server-825f6f99/units`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${publicAnonKey}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(newUnit)
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to create unit');
+      }
+
+      await fetchUnits();
+      setSelectedUnitId(newUnit.id);
+      setIsCreateDialogOpen(false);
+    } catch (error) {
+      console.error('Error creating unit:', error);
+    }
+  };
+
+  const handleUpdateUnit = async (updatedUnit: UnitPlan) => {
+    try {
+      const response = await fetch(`https://${projectId}.supabase.co/functions/v1/make-server-825f6f99/units/${updatedUnit.id}`, {
+        method: 'PUT',
+        headers: {
+          'Authorization': `Bearer ${publicAnonKey}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(updatedUnit)
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to update unit');
+      }
+
+      setUnits(units.map(u => u.id === updatedUnit.id ? updatedUnit : u));
+    } catch (error) {
+      console.error('Error updating unit:', error);
+    }
+  };
+
+  const handleDeleteUnit = async (unitId: string) => {
+    try {
+      await fetch(`https://${projectId}.supabase.co/functions/v1/make-server-825f6f99/units/${unitId}`, {
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${publicAnonKey}`
+        }
+      });
+      
+      setUnits(units.filter(u => u.id !== unitId));
+      if (selectedUnitId === unitId) {
+        setSelectedUnitId(null);
+      }
+    } catch (error) {
+      console.error('Error deleting unit:', error);
+    }
+  };
+
+  const handleBackToList = () => {
+    setSelectedUnitId(null);
+  };
 
   const renderContent = () => {
     switch (currentView) {
       case 'dashboard':
-        return <Dashboard onViewChange={setCurrentView} />;
+        return <Dashboard onViewChange={setCurrentView} units={units} />;
       case 'planner':
         return <PlannerView />;
-      case 'lessons':
-        return <LessonsView />;
+      case 'unit-plans':
+        if (selectedUnit) {
+          return (
+            <div className="p-8">
+              <UnitPlanEditor
+                unit={selectedUnit}
+                onUpdate={handleUpdateUnit}
+                onBack={handleBackToList}
+              />
+            </div>
+          );
+        }
+        return (
+          <div className="p-8">
+            <UnitPlanList
+              units={units}
+              onSelectUnit={setSelectedUnitId}
+              onDeleteUnit={handleDeleteUnit}
+            />
+          </div>
+        );
       case 'students':
         return <StudentsView />;
       case 'settings':
         return <SettingsView />;
       default:
-        return <Dashboard onViewChange={setCurrentView} />;
+        return <Dashboard onViewChange={setCurrentView} units={units} />;
     }
   };
 
@@ -50,7 +177,7 @@ export default function App() {
         <div className="h-16 flex items-center px-4 border-b border-slate-100">
           <div className="flex items-center gap-2 font-bold text-xl text-indigo-600">
             <BookOpen className="h-6 w-6" />
-            {isSidebarOpen && <span>PlanPro</span>}
+            {isSidebarOpen && <span>EduPlan</span>}
           </div>
         </div>
 
@@ -70,10 +197,13 @@ export default function App() {
             isOpen={isSidebarOpen}
           />
           <SidebarItem 
-            icon={<BookOpen size={20} />} 
-            label="My Lessons" 
-            isActive={currentView === 'lessons'} 
-            onClick={() => setCurrentView('lessons')}
+            icon={<Sparkles size={20} />} 
+            label="Unit Plans" 
+            isActive={currentView === 'unit-plans'} 
+            onClick={() => {
+              setCurrentView('unit-plans');
+              setSelectedUnitId(null);
+            }}
             isOpen={isSidebarOpen}
           />
           <SidebarItem 
@@ -127,9 +257,14 @@ export default function App() {
               <Bell className="h-5 w-5 text-slate-500" />
               <span className="absolute top-2 right-2 h-2 w-2 bg-red-500 rounded-full border-2 border-white"></span>
             </Button>
-            <Button className="bg-indigo-600 hover:bg-indigo-700 text-white gap-2">
-              <Plus className="h-4 w-4" /> New Lesson
-            </Button>
+            {currentView === 'unit-plans' && !selectedUnit && (
+              <Button 
+                onClick={() => setIsCreateDialogOpen(true)}
+                className="bg-indigo-600 hover:bg-indigo-700 text-white gap-2"
+              >
+                <Plus className="h-4 w-4" /> New Unit Plan
+              </Button>
+            )}
           </div>
         </header>
 
@@ -138,6 +273,14 @@ export default function App() {
           {renderContent()}
         </div>
       </main>
+
+      <CreateUnitDialog
+        open={isCreateDialogOpen}
+        onOpenChange={setIsCreateDialogOpen}
+        onCreateUnit={handleCreateUnit}
+      />
+
+      <Toaster />
     </div>
   );
 }

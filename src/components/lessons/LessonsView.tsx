@@ -44,14 +44,20 @@ export function LessonsView() {
   const fetchLessons = async () => {
     try {
       setLoading(true);
+      console.log('Fetching lessons from backend...');
       const response = await fetch(`https://${projectId}.supabase.co/functions/v1/make-server-825f6f99/lessons`, {
         headers: {
           'Authorization': `Bearer ${publicAnonKey}`
         }
       });
+      console.log('Response status:', response.status);
       if (response.ok) {
         const data = await response.json();
+        console.log('Lessons received:', data);
         setLessons(data);
+      } else {
+        const errorText = await response.text();
+        console.error('Failed to fetch lessons:', response.status, errorText);
       }
     } catch (error) {
       console.error('Error fetching lessons:', error);
